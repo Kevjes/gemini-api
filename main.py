@@ -1,5 +1,6 @@
 import asyncio
 import os
+import base64
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from pathlib import Path
@@ -17,17 +18,21 @@ class Prompt(BaseModel):
 class TextResponse(BaseModel):
     text: str
 
-# Modèle pour la réponse image
+# Modèle pour la réponse image (chemin fichier)
 class ImageResponse(BaseModel):
     filename: str
     path: str
+
+# Modèle pour la réponse image en base64
+class ImageBase64Response(BaseModel):
+    base64_image: str
 
 app = FastAPI(title="Mini Gemini API")
 
 # Client Gemini global
 client = None
 
-# Dossier pour sauver les images
+# Dossier pour sauver les images (pour /generate-image uniquement)
 IMAGES_DIR = Path("generated_images")
 IMAGES_DIR.mkdir(exist_ok=True)
 
@@ -82,6 +87,31 @@ async def generate_image(prompt_input: Prompt):
         return {"filename": filename, "full_path": str(filepath.absolute())}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erreur génération image : {str(e)}")
+
+@app.post("/generate-image-base64", response_model=ImageBase64Response)
+async def generate_image_base64(prompt_input: Prompt):
+    if not client:
+        raise HTTPException(status_code=500, detail="Client non initialisé.")
+    
+    try:
+        full_prompt = f"Generate an image of: {prompt_input.prompt}"
+        response = await client.generate_content(full_prompt)
+        
+        if not response.images:
+            raise HTTPException(status_code=400, detail="Aucune image générée. Utilise un prompt clair comme 'a cat in space'.")
+        
+        # Récupérer les données binaires de l'image sans sauvegarder
+        image = response.images[0]
+        image_data = await image._get_data()  # Méthode interne pour obtenir les bytes
+        if not image_data:
+            raise HTTPException(status_code=500, detail="Impossible de récupérer les données de l'image.")
+        
+        # Convertir en base64
+        base64_image = base64.b64encode(image_data).decode("utf-8")
+        
+        return ImageBase64Response(base64_image=base64_image)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erreur génération image base64 : {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn
