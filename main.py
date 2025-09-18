@@ -1,6 +1,7 @@
 import asyncio
 import os
 import base64
+import io
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from pathlib import Path
@@ -100,9 +101,13 @@ async def generate_image_base64(prompt_input: Prompt):
         if not response.images:
             raise HTTPException(status_code=400, detail="Aucune image générée. Utilise un prompt clair comme 'a cat in space'.")
         
-        # Récupérer les données binaires de l'image sans sauvegarder
         image = response.images[0]
-        image_data = await image._get_data()  # Méthode interne pour obtenir les bytes
+        # Utiliser un buffer en mémoire pour capturer les données de l'image
+        buffer = io.BytesIO()
+        await image.save(file=buffer, filename="temp.png", verbose=False)
+        buffer.seek(0)
+        image_data = buffer.read()
+        
         if not image_data:
             raise HTTPException(status_code=500, detail="Impossible de récupérer les données de l'image.")
         
