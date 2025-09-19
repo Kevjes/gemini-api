@@ -99,21 +99,15 @@ async def generate_image_base64(prompt_input: Prompt):
         response = await client.generate_content(full_prompt)
         
         if not response.images:
-            raise HTTPException(status_code=400, detail="Aucune image générée. Utilise un prompt clair comme 'a cat in space'.")
+            raise HTTPException(status_code=400, detail="Aucune image générée.")
         
-        image = response.images[0]
-        # Utiliser un buffer en mémoire pour capturer les données de l'image
+        image = response.images[0]  # devrait être un PIL.Image
         buffer = io.BytesIO()
-        await image.save(file=buffer, filename="temp.png", verbose=False)
+        image.save(buffer, format="PNG")
         buffer.seek(0)
         image_data = buffer.read()
         
-        if not image_data:
-            raise HTTPException(status_code=500, detail="Impossible de récupérer les données de l'image.")
-        
-        # Convertir en base64
         base64_image = base64.b64encode(image_data).decode("utf-8")
-        
         return ImageBase64Response(base64_image=base64_image)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erreur génération image base64 : {str(e)}")
