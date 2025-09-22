@@ -1,4 +1,5 @@
-import asyncio
+import tempfile
+from pathlib import Path
 import os
 import io
 from fastapi import FastAPI, HTTPException, Response, UploadFile, File, Form
@@ -92,29 +93,39 @@ async def generate_with_images(
     if not client:
         raise HTTPException(status_code=500, detail="Client non initialisé.")
 
+    temp_files = []
     try:
-        # Lire toutes les images uploadées en mémoire
-        file_buffers = []
+        # Sauvegarder les images en fichiers temporaires
         for img in images or []:
             content = await img.read()
-            # Créer un BytesIO pour simuler un fichier en mémoire
-            file_buffers.append(io.BytesIO(content))
+            tmp_fd, tmp_path = tempfile.mkstemp(
+                suffix=os.path.splitext(img.filename)[1],
+                dir="/tmp"
+            )
+            with os.fdopen(tmp_fd, "wb") as f:
+                f.write(content)
+            temp_files.append(tmp_path)
 
-        # Appel à Gemini avec prompt + fichiers
+        # Appel Gemini avec fichiers
         response = await client.generate_content(
             prompt,
-            files=file_buffers
+            files=[Path(p) for p in temp_files]
         )
 
+        # Nettoyage immédiat
+        for path in temp_files:
+            try:
+                os.remove(path)
+            except:
+                pass
+
+        # Retour image si générée
         if response.images and len(response.images) > 0:
             image = response.images[0]
-            if hasattr(image, "save"):
-                buf = io.BytesIO()
-                image.save(buf, format="PNG")
-                buf.seek(0)
-                return Response(content=buf.getvalue(), media_type="image/png")
-            else:
-                return Response(content=bytes(image), media_type="image/png")
+            buf = io.BytesIO()
+            image.save(buf, format="PNG")
+            buf.seek(0)
+            return Response(content=buf.getvalue(), media_type="image/png")
         else:
             return {"text": response.text or "Pas d'image générée."}
 
