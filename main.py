@@ -88,7 +88,7 @@ async def generate_image_binary(prompt_input: Prompt):
 @app.post("/generate-with-images")
 async def generate_with_images(
     prompt: str = Form(...),
-    images: list[UploadFile] = File(None)
+    images: list[UploadFile] = File(default=[])
 ):
     if not client:
         raise HTTPException(status_code=500, detail="Client non initialisé.")
@@ -96,28 +96,22 @@ async def generate_with_images(
     temp_files = []
     try:
         # Sauvegarder les images en fichiers temporaires
-        for img in images or []:
-            content = await img.read()
-            tmp_fd, tmp_path = tempfile.mkstemp(
-                suffix=os.path.splitext(img.filename)[1],
-                dir="/tmp"
-            )
-            with os.fdopen(tmp_fd, "wb") as f:
-                f.write(content)
-            temp_files.append(tmp_path)
+        for img in images:
+            if img.filename:  # Vérifier que le fichier existe
+                content = await img.read()
+                tmp_fd, tmp_path = tempfile.mkstemp(
+                    suffix=os.path.splitext(img.filename)[1],
+                    dir=tempfile.gettempdir()
+                )
+                with os.fdopen(tmp_fd, "wb") as f:
+                    f.write(content)
+                temp_files.append(tmp_path)
 
         # Appel Gemini avec fichiers
         response = await client.generate_content(
             prompt,
             files=[Path(p) for p in temp_files]
         )
-
-        # Nettoyage immédiat
-        for path in temp_files:
-            try:
-                os.remove(path)
-            except:
-                pass
 
         # Retour image si générée
         if response.images and len(response.images) > 0:
@@ -131,6 +125,13 @@ async def generate_with_images(
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erreur generate-with-images : {str(e)}")
+    finally:
+        # Nettoyage des fichiers temporaires
+        for path in temp_files:
+            try:
+                os.remove(path)
+            except:
+                pass
 
 
 if __name__ == "__main__":
