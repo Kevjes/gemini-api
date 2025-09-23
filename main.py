@@ -82,8 +82,8 @@ async def generate_image_binary(prompt_input: Prompt):
             }
             async with httpx.AsyncClient(
                 follow_redirects=True,
-                max_redirects=20,
-                timeout=30.0,
+                max_redirects=50,
+                timeout=120.0,
                 headers=headers
             ) as http_client:
                 response = await http_client.get(image.url)
@@ -145,8 +145,8 @@ async def generate_with_images(
                         }
                         async with httpx.AsyncClient(
                             follow_redirects=True,
-                            max_redirects=20,
-                            timeout=30.0,
+                            max_redirects=50,
+                            timeout=120.0,
                             headers=headers
                         ) as http_client:
                             img_response = await http_client.get(image.url)
