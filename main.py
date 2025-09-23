@@ -70,27 +70,16 @@ async def generate_image_binary(prompt_input: Prompt):
 
         image = response.images[0]
 
-        # Accéder directement aux données binaires selon la documentation officielle
+        # Accéder exclusivement aux données binaires directes - plus fiable
         if hasattr(image, 'bytes') and image.bytes:
-            # Méthode recommandée : accès direct aux bytes
             image_bytes = image.bytes
-        elif hasattr(image, 'url') and image.url:
-            # Fallback : télécharger depuis l'URL avec configuration Google
-            import httpx
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-            }
-            async with httpx.AsyncClient(
-                follow_redirects=True,
-                max_redirects=100,
-                timeout=300.0,
-                headers=headers
-            ) as http_client:
-                response = await http_client.get(image.url)
-                image_bytes = response.content
+            print(f"Image bytes disponibles: {len(image_bytes)} bytes")
         else:
-            # Dernier recours pour compatibilité
-            raise HTTPException(status_code=500, detail="Image sans données bytes ni URL accessible")
+            # Log pour debug
+            print(f"Image object attributes: {dir(image)}")
+            if hasattr(image, 'url'):
+                print(f"Image URL: {image.url}")
+            raise HTTPException(status_code=500, detail="Image bytes non disponibles - problème avec gemini_webapi")
 
         return Response(content=image_bytes, media_type="image/png")
 
@@ -133,27 +122,16 @@ async def generate_with_images(
                 if response.images and len(response.images) > 0:
                     image = response.images[0]
 
-                    # Accéder directement aux données binaires selon la documentation officielle
+                    # Accéder exclusivement aux données binaires directes - plus fiable
                     if hasattr(image, 'bytes') and image.bytes:
-                        # Méthode recommandée : accès direct aux bytes
+                        print(f"Image bytes disponibles: {len(image.bytes)} bytes")
                         return Response(content=image.bytes, media_type="image/png")
-                    elif hasattr(image, 'url') and image.url:
-                        # Fallback : télécharger depuis l'URL avec configuration Google
-                        import httpx
-                        headers = {
-                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-                        }
-                        async with httpx.AsyncClient(
-                            follow_redirects=True,
-                            max_redirects=100,
-                            timeout=300.0,
-                            headers=headers
-                        ) as http_client:
-                            img_response = await http_client.get(image.url)
-                            return Response(content=img_response.content, media_type="image/png")
                     else:
-                        # Aucune donnée image accessible
-                        raise HTTPException(status_code=500, detail="Image générée mais données inaccessibles")
+                        # Log pour debug
+                        print(f"Image object attributes: {dir(image)}")
+                        if hasattr(image, 'url'):
+                            print(f"Image URL: {image.url}")
+                        raise HTTPException(status_code=500, detail="Image bytes non disponibles - problème avec gemini_webapi")
                 else:
                     # Aucune image générée - instabilité de l'IA, retry automatique
                     if attempt < max_retries - 1:
