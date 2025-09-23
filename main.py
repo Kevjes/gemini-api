@@ -115,31 +115,50 @@ async def generate_with_images(
                     f.write(content)
                 temp_files.append(tmp_path)
 
-        # Appel Gemini avec fichiers
-        response = await client.generate_content(
-            prompt,
-            files=[Path(p) for p in temp_files]
-        )
-
-        # Retour image si générée
-        if response.images and len(response.images) > 0:
-            image = response.images[0]
+        # Appel Gemini avec retry automatique pour gérer l'instabilité de l'IA
+        max_retries = 3
+        for attempt in range(max_retries):
             try:
-                buf = io.BytesIO()
-                await image.save(buf)
-                buf.seek(0)
-                return Response(content=buf.getvalue(), media_type="image/png")
-            except Exception as save_error:
-                # Si la sauvegarde échoue, essayer d'accéder aux données brutes
-                if hasattr(image, 'data'):
-                    return Response(content=image.data, media_type="image/png")
-                elif hasattr(image, '_data'):
-                    return Response(content=image._data, media_type="image/png")
+                response = await client.generate_content(
+                    prompt,
+                    files=[Path(p) for p in temp_files]
+                )
+
+                # Retour image si générée
+                if response.images and len(response.images) > 0:
+                    image = response.images[0]
+                    try:
+                        buf = io.BytesIO()
+                        await image.save(buf)
+                        buf.seek(0)
+                        return Response(content=buf.getvalue(), media_type="image/png")
+                    except Exception as save_error:
+                        # Si la sauvegarde échoue, essayer d'accéder aux données brutes
+                        if hasattr(image, 'data'):
+                            return Response(content=image.data, media_type="image/png")
+                        elif hasattr(image, '_data'):
+                            return Response(content=image._data, media_type="image/png")
+                        else:
+                            raise HTTPException(status_code=500, detail=f"Impossible de sauvegarder l'image: {str(save_error)}")
                 else:
-                    raise HTTPException(status_code=500, detail=f"Impossible de sauvegarder l'image: {str(save_error)}")
-        else:
-            # Retourner une erreur HTTP au lieu de JSON pour maintenir la cohérence du content-type
-            raise HTTPException(status_code=400, detail="Aucune image générée pour ce prompt.")
+                    # Aucune image générée - instabilité de l'IA, retry automatique
+                    if attempt < max_retries - 1:
+                        print(f"Tentative {attempt + 1}/{max_retries} - Aucune image générée, retry...")
+                        continue
+                    else:
+                        # Dernier essai échoué
+                        raise HTTPException(status_code=400, detail="Aucune image générée après 3 tentatives.")
+
+            except HTTPException:
+                # Re-lever les HTTPException (comme les erreurs 400/500)
+                raise
+            except Exception as e:
+                # Autres erreurs : retry si ce n'est pas le dernier essai
+                if attempt < max_retries - 1:
+                    print(f"Tentative {attempt + 1}/{max_retries} - Erreur: {e}, retry...")
+                    continue
+                else:
+                    raise HTTPException(status_code=500, detail=f"Erreur après 3 tentatives: {str(e)}")
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erreur generate-with-images : {str(e)}")
