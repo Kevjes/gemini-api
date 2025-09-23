@@ -121,7 +121,8 @@ async def generate_with_images(
             buf.seek(0)
             return Response(content=buf.getvalue(), media_type="image/png")
         else:
-            return {"text": response.text or "Pas d'image générée."}
+            # Retourner une erreur HTTP au lieu de JSON pour maintenir la cohérence du content-type
+            raise HTTPException(status_code=400, detail="Aucune image générée pour ce prompt.")
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erreur generate-with-images : {str(e)}")
