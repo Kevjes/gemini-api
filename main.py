@@ -70,16 +70,15 @@ async def generate_image_binary(prompt_input: Prompt):
 
         image = response.images[0]
 
-        # Accéder exclusivement aux données binaires directes - plus fiable
-        if hasattr(image, 'bytes') and image.bytes:
-            image_bytes = image.bytes
-            print(f"Image bytes disponibles: {len(image_bytes)} bytes")
+        # Utiliser la méthode save() async selon la vraie API gemini_webapi
+        if hasattr(image, 'save'):
+            buffer = io.BytesIO()
+            await image.save(buffer)
+            image_bytes = buffer.getvalue()
+            print(f"Image sauvegardée: {len(image_bytes)} bytes")
         else:
-            # Log pour debug
             print(f"Image object attributes: {dir(image)}")
-            if hasattr(image, 'url'):
-                print(f"Image URL: {image.url}")
-            raise HTTPException(status_code=500, detail="Image bytes non disponibles - problème avec gemini_webapi")
+            raise HTTPException(status_code=500, detail="Méthode save() non disponible sur l'objet image")
 
         return Response(content=image_bytes, media_type="image/png")
 
@@ -122,16 +121,16 @@ async def generate_with_images(
                 if response.images and len(response.images) > 0:
                     image = response.images[0]
 
-                    # Accéder exclusivement aux données binaires directes - plus fiable
-                    if hasattr(image, 'bytes') and image.bytes:
-                        print(f"Image bytes disponibles: {len(image.bytes)} bytes")
-                        return Response(content=image.bytes, media_type="image/png")
+                    # Utiliser la méthode save() async selon la vraie API gemini_webapi
+                    if hasattr(image, 'save'):
+                        buffer = io.BytesIO()
+                        await image.save(buffer)
+                        image_bytes = buffer.getvalue()
+                        print(f"Image sauvegardée: {len(image_bytes)} bytes")
+                        return Response(content=image_bytes, media_type="image/png")
                     else:
-                        # Log pour debug
                         print(f"Image object attributes: {dir(image)}")
-                        if hasattr(image, 'url'):
-                            print(f"Image URL: {image.url}")
-                        raise HTTPException(status_code=500, detail="Image bytes non disponibles - problème avec gemini_webapi")
+                        raise HTTPException(status_code=500, detail="Méthode save() non disponible sur l'objet image")
                 else:
                     # Aucune image générée - instabilité de l'IA, retry automatique
                     if attempt < max_retries - 1:
