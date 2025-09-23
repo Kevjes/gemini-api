@@ -70,22 +70,19 @@ async def generate_image_binary(prompt_input: Prompt):
 
         image = response.images[0]
 
-        # Les images de gemini_webapi sont des objets avec méthode save() async
-        # Mais on doit gérer les formats correctement
-        try:
-            # Tenter de sauvegarder directement
-            buffer = io.BytesIO()
-            await image.save(buffer)
-            image_bytes = buffer.getvalue()
-        except Exception as save_error:
-            # Si ça échoue, essayer d'accéder aux données brutes
-            if hasattr(image, 'data'):
-                image_bytes = image.data
-            elif hasattr(image, '_data'):
-                image_bytes = image._data
-            else:
-                # Dernier recours : convertir en bytes
-                image_bytes = bytes(image)
+        # Accéder directement aux données binaires selon la documentation officielle
+        if hasattr(image, 'bytes') and image.bytes:
+            # Méthode recommandée : accès direct aux bytes
+            image_bytes = image.bytes
+        elif hasattr(image, 'url') and image.url:
+            # Fallback : télécharger depuis l'URL
+            import httpx
+            async with httpx.AsyncClient() as http_client:
+                response = await http_client.get(image.url)
+                image_bytes = response.content
+        else:
+            # Dernier recours pour compatibilité
+            raise HTTPException(status_code=500, detail="Image sans données bytes ni URL accessible")
 
         return Response(content=image_bytes, media_type="image/png")
 
@@ -127,19 +124,20 @@ async def generate_with_images(
                 # Retour image si générée
                 if response.images and len(response.images) > 0:
                     image = response.images[0]
-                    try:
-                        buf = io.BytesIO()
-                        await image.save(buf)
-                        buf.seek(0)
-                        return Response(content=buf.getvalue(), media_type="image/png")
-                    except Exception as save_error:
-                        # Si la sauvegarde échoue, essayer d'accéder aux données brutes
-                        if hasattr(image, 'data'):
-                            return Response(content=image.data, media_type="image/png")
-                        elif hasattr(image, '_data'):
-                            return Response(content=image._data, media_type="image/png")
-                        else:
-                            raise HTTPException(status_code=500, detail=f"Impossible de sauvegarder l'image: {str(save_error)}")
+
+                    # Accéder directement aux données binaires selon la documentation officielle
+                    if hasattr(image, 'bytes') and image.bytes:
+                        # Méthode recommandée : accès direct aux bytes
+                        return Response(content=image.bytes, media_type="image/png")
+                    elif hasattr(image, 'url') and image.url:
+                        # Fallback : télécharger depuis l'URL
+                        import httpx
+                        async with httpx.AsyncClient() as http_client:
+                            img_response = await http_client.get(image.url)
+                            return Response(content=img_response.content, media_type="image/png")
+                    else:
+                        # Aucune donnée image accessible
+                        raise HTTPException(status_code=500, detail="Image générée mais données inaccessibles")
                 else:
                     # Aucune image générée - instabilité de l'IA, retry automatique
                     if attempt < max_retries - 1:
