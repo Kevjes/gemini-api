@@ -73,7 +73,7 @@ async def generate_image_binary(prompt_input: Prompt):
         # Vérifier si c'est un objet PIL.Image
         if hasattr(image, "save"):
             buffer = io.BytesIO()
-            image.save(buffer, format="PNG")
+            await image.save(buffer, format="PNG")
             image_bytes = buffer.getvalue()
         else:
             # Si c'est déjà du binaire
@@ -117,7 +117,7 @@ async def generate_with_images(
         if response.images and len(response.images) > 0:
             image = response.images[0]
             buf = io.BytesIO()
-            image.save(buf, format="PNG")
+            await image.save(buf, format="PNG")
             buf.seek(0)
             return Response(content=buf.getvalue(), media_type="image/png")
         else:
