@@ -75,9 +75,9 @@ async def generate_image_binary(prompt_input: Prompt):
             # Méthode recommandée : accès direct aux bytes
             image_bytes = image.bytes
         elif hasattr(image, 'url') and image.url:
-            # Fallback : télécharger depuis l'URL
+            # Fallback : télécharger depuis l'URL avec redirections
             import httpx
-            async with httpx.AsyncClient() as http_client:
+            async with httpx.AsyncClient(follow_redirects=True) as http_client:
                 response = await http_client.get(image.url)
                 image_bytes = response.content
         else:
@@ -130,9 +130,9 @@ async def generate_with_images(
                         # Méthode recommandée : accès direct aux bytes
                         return Response(content=image.bytes, media_type="image/png")
                     elif hasattr(image, 'url') and image.url:
-                        # Fallback : télécharger depuis l'URL
+                        # Fallback : télécharger depuis l'URL avec redirections
                         import httpx
-                        async with httpx.AsyncClient() as http_client:
+                        async with httpx.AsyncClient(follow_redirects=True) as http_client:
                             img_response = await http_client.get(image.url)
                             return Response(content=img_response.content, media_type="image/png")
                     else:
