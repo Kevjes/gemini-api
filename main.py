@@ -70,14 +70,22 @@ async def generate_image_binary(prompt_input: Prompt):
 
         image = response.images[0]
 
-        # Vérifier si c'est un objet PIL.Image
-        if hasattr(image, "save"):
+        # Les images de gemini_webapi sont des objets avec méthode save() async
+        # Mais on doit gérer les formats correctement
+        try:
+            # Tenter de sauvegarder directement
             buffer = io.BytesIO()
             await image.save(buffer)
             image_bytes = buffer.getvalue()
-        else:
-            # Si c'est déjà du binaire
-            image_bytes = bytes(image)
+        except Exception as save_error:
+            # Si ça échoue, essayer d'accéder aux données brutes
+            if hasattr(image, 'data'):
+                image_bytes = image.data
+            elif hasattr(image, '_data'):
+                image_bytes = image._data
+            else:
+                # Dernier recours : convertir en bytes
+                image_bytes = bytes(image)
 
         return Response(content=image_bytes, media_type="image/png")
 
@@ -116,10 +124,19 @@ async def generate_with_images(
         # Retour image si générée
         if response.images and len(response.images) > 0:
             image = response.images[0]
-            buf = io.BytesIO()
-            await image.save(buf)
-            buf.seek(0)
-            return Response(content=buf.getvalue(), media_type="image/png")
+            try:
+                buf = io.BytesIO()
+                await image.save(buf)
+                buf.seek(0)
+                return Response(content=buf.getvalue(), media_type="image/png")
+            except Exception as save_error:
+                # Si la sauvegarde échoue, essayer d'accéder aux données brutes
+                if hasattr(image, 'data'):
+                    return Response(content=image.data, media_type="image/png")
+                elif hasattr(image, '_data'):
+                    return Response(content=image._data, media_type="image/png")
+                else:
+                    raise HTTPException(status_code=500, detail=f"Impossible de sauvegarder l'image: {str(save_error)}")
         else:
             # Retourner une erreur HTTP au lieu de JSON pour maintenir la cohérence du content-type
             raise HTTPException(status_code=400, detail="Aucune image générée pour ce prompt.")
